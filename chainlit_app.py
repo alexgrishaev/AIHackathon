@@ -62,9 +62,9 @@ async def on_chat_start():
 
 
 @cl.on_message
-async def on_message(message: cl.Message):
+async def on_message(message):
     """Handle incoming user messages."""
-    # Get conversation ID from session and ensure it's valid
+    # Get conversation ID from session
     conversation_id = cl.user_session.get("conversation_id")
     if not conversation_id:
         # If conversation_id is missing, send error and return
@@ -76,12 +76,21 @@ async def on_message(message: cl.Message):
     
     # Debug message objects
     print(f"Message type: {type(message)}")
-    print(f"Message content type: {type(message.content) if hasattr(message, 'content') else 'No content attribute'}")
     
-    # Store message in database
+    # Safely extract message content
+    if isinstance(message, str):
+        message_content = message
+    elif hasattr(message, 'content'):
+        message_content = message.content
+    else:
+        message_content = str(message)
+    
+    print(f"Extracted message content: {message_content[:50]}...")
+    
+    # Store message in database with proper transaction handling
     try:
-        # Access message content safely
-        message_content = message.content if hasattr(message, 'content') else str(message)
+        # Start a fresh transaction
+        db.rollback()  # Roll back any failed transaction
         
         db_message = Message(
             conversation_id=conversation_id,
@@ -91,18 +100,21 @@ async def on_message(message: cl.Message):
         db.add(db_message)
         db.commit()
     except Exception as e:
+        db.rollback()  # Important: Roll back on error
         print(f"Error storing message: {e}")
     
     # Process the message (in a real app, you'd call your AI model here)
-    message_content = message.content if hasattr(message, 'content') else str(message)
     response_content = f"You said: {message_content}\n\nThis is a demo response. In a real application, this would be processed by an AI model."
     
     # Send response
     response = cl.Message(content=response_content)
     await response.send()
     
-    # Store response in database
+    # Store response in database with proper transaction handling
     try:
+        # Ensure we're in a clean transaction state
+        db.rollback()  # Roll back any failed transaction
+        
         db_response = Message(
             conversation_id=conversation_id,
             role="assistant",
@@ -111,6 +123,7 @@ async def on_message(message: cl.Message):
         db.add(db_response)
         db.commit()
     except Exception as e:
+        db.rollback()  # Important: Roll back on error
         print(f"Error storing response: {e}")
 
 
