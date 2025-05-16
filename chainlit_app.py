@@ -99,12 +99,19 @@ async def on_message(message: cl.Message):
         print(f"Error storing response: {e}")
 
 
-@cl.on_chat_end
-async def on_chat_end():
-    """Clean up when the chat session ends."""
-    # Close the database session
-    # This is a bit simplistic - in production you'd want proper session management
+# Chainlit 0.7.0 doesn't support on_chat_end
+# We'll use an alternative approach for cleanup
+
+# Register a cleanup function using atexit to ensure DB connection is closed
+import atexit
+
+def cleanup_db_session():
+    """Clean up database connections when the application exits."""
     try:
         db.close()
+        print("Database session closed successfully")
     except Exception as e:
         print(f"Error closing database session: {e}")
+
+# Register the cleanup function
+atexit.register(cleanup_db_session)
