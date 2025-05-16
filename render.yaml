@@ -1,5 +1,6 @@
 services:
-  # Web service for the Chainlit application  - type: web
+  # Web service for the Chainlit application
+  - type: web
     name: aihackathon-app
     env: python
     plan: free
