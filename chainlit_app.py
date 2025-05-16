@@ -5,6 +5,7 @@ This file is used for deployment on Render.com.
 
 import os
 import sys
+import uuid
 
 # Add the project root to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -28,10 +29,17 @@ from app.database.connection import get_db
 db_generator = get_db()
 db: Session = next(db_generator)
 
+# Global variable for current conversation - only use in development!
+# In production, you would use proper user authentication and session management
+CURRENT_CONVERSATION_ID = None
+CURRENT_USER_ID = None
+
 
 @cl.on_chat_start
 async def on_chat_start():
     """Initialize the chat session when a user starts a conversation."""
+    global CURRENT_CONVERSATION_ID, CURRENT_USER_ID
+    
     # Send initial message
     await cl.Message(
         content="Welcome to AIHackathon! How can I help you today?",
@@ -48,13 +56,20 @@ async def on_chat_start():
             db.commit()
             db.refresh(user)
         
-        conversation = Conversation(user_id=user.id, title="New Conversation")
+        # Create a unique conversation title with timestamp
+        import datetime
+        conversation_title = f"Conversation {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        
+        conversation = Conversation(user_id=user.id, title=conversation_title)
         db.add(conversation)
         db.commit()
+        db.refresh(conversation)
         
-        # Store conversation ID in session
-        cl.user_session.set("conversation_id", str(conversation.id))
-        cl.user_session.set("user_id", str(user.id))
+        # Store conversation ID in global variable (for development only)
+        CURRENT_CONVERSATION_ID = conversation.id
+        CURRENT_USER_ID = user.id
+        
+        print(f"Started new conversation with ID: {CURRENT_CONVERSATION_ID}")
         
     except Exception as e:
         print(f"Error initializing conversation: {e}")
@@ -64,15 +79,33 @@ async def on_chat_start():
 @cl.on_message
 async def on_message(message):
     """Handle incoming user messages."""
-    # Get conversation ID from session
-    conversation_id = cl.user_session.get("conversation_id")
-    if not conversation_id:
-        # If conversation_id is missing, send error and return
-        await cl.Message(
-            content="Session error: Could not find conversation ID. Please refresh the page.",
-            author="System"
-        ).send()
-        return
+    global CURRENT_CONVERSATION_ID
+    
+    # Check if we have a current conversation
+    if not CURRENT_CONVERSATION_ID:
+        # If missing, create a new conversation
+        try:
+            user = db.query(User).filter(User.username == 'demo_user').first()
+            if not user:
+                user = User(username='demo_user', email='demo@example.com')
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+            
+            conversation = Conversation(user_id=user.id, title=f"Recovered conversation {uuid.uuid4().hex[:8]}")
+            db.add(conversation)
+            db.commit()
+            db.refresh(conversation)
+            
+            CURRENT_CONVERSATION_ID = conversation.id
+            print(f"Created recovery conversation with ID: {CURRENT_CONVERSATION_ID}")
+        except Exception as e:
+            print(f"Error creating recovery conversation: {e}")
+            await cl.Message(
+                content="Error creating conversation. Please refresh the page and try again.",
+                author="System"
+            ).send()
+            return
     
     # Debug message objects
     print(f"Message type: {type(message)}")
@@ -93,7 +126,7 @@ async def on_message(message):
         db.rollback()  # Roll back any failed transaction
         
         db_message = Message(
-            conversation_id=conversation_id,
+            conversation_id=CURRENT_CONVERSATION_ID,
             role="user",
             content=message_content
         )
@@ -116,7 +149,7 @@ async def on_message(message):
         db.rollback()  # Roll back any failed transaction
         
         db_response = Message(
-            conversation_id=conversation_id,
+            conversation_id=CURRENT_CONVERSATION_ID,
             role="assistant",
             content=response_content
         )
@@ -126,9 +159,6 @@ async def on_message(message):
         db.rollback()  # Important: Roll back on error
         print(f"Error storing response: {e}")
 
-
-# Chainlit 0.7.0 doesn't support on_chat_end
-# We'll use an alternative approach for cleanup
 
 # Register a cleanup function using atexit to ensure DB connection is closed
 import atexit
