@@ -1,27 +1,28 @@
 """
-Main Chainlit application for AIHackathon conversational interface.
+Direct entrypoint for Chainlit application.
+This file is used for deployment on Render.com.
 """
+
 import os
 import sys
-from typing import Dict, List
 
-# Fix Python path to allow imports from the app package
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-    print(f"Added {project_root} to Python path")
+# Add the project root to Python path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Import Chainlit packages first
 import chainlit as cl
 from chainlit.types import AskFileResponse
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
+from typing import Dict, List
 
 # Load environment variables
 load_dotenv()
 
-# Import database models
+# Now we can import from the app package
 from app.models.models import User, Conversation, Message
 from app.database.connection import get_db
+
 
 # Get database session
 db_generator = get_db()
