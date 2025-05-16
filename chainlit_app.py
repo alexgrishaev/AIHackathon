@@ -40,9 +40,18 @@ async def on_chat_start():
     """Initialize the chat session when a user starts a conversation."""
     global CURRENT_CONVERSATION_ID, CURRENT_USER_ID
     
-    # Send initial message
+    # Get user count from database
+    try:
+        user_count = db.query(User).count()
+        conversation_count = db.query(Conversation).count()
+        message_count = db.query(Message).count()
+        db_stats = f"Current system stats: {user_count} users, {conversation_count} conversations, {message_count} total messages."
+    except Exception as e:
+        db_stats = f"Could not retrieve database statistics: {str(e)}"
+    
+    # Send initial message with user count
     await cl.Message(
-        content="Welcome to AIHackathon! How can I help you today?",
+        content=f"Welcome to AIHackathon! How can I help you today?\n\n_System: {db_stats}_",
         author="AIHackathon Bot"
     ).send()
     
