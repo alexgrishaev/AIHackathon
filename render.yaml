@@ -1,11 +1,10 @@
 services:
-  # Web service for the Chainlit application
-  - type: web
+  # Web service for the Chainlit application  - type: web
     name: aihackathon-app
     env: python
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: chainlit run chainlit_app.py --port $PORT --host 0.0.0.0
+    buildCommand: pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
+    startCommand: python scripts/run_migrations.py && chainlit run chainlit_app.py --port $PORT --host 0.0.0.0
     envVars:
       - key: PYTHON_VERSION
         value: 3.10.0

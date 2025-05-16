@@ -1,6 +1,6 @@
 """
-Test database connection and run migrations locally.
-This script is useful for verifying database setup and migrations before deployment.
+Script to run Alembic migrations on application startup.
+This script is designed to be run before starting the application on Render.com.
 """
 
 import os
@@ -8,34 +8,22 @@ import sys
 import subprocess
 from pathlib import Path
 import logging
-from sqlalchemy import inspect, text
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger("db_test")
+logger = logging.getLogger("db_migrations")
 
-# Adjust path for imports
+# Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from app.database.connection import engine, get_db, Base
-from app.models.models import User, Conversation, Message
 
-
-def test_connection():
-    """Test database connection and create tables using migrations."""
+def run_migrations():
+    """Run database migrations using Alembic."""
     try:
-        # Test connection by executing a simple query
-        with engine.connect() as conn:
-            result = conn.execute(text("SELECT 1"))
-            logger.info("Database connection successful!")
-        
-        # Run migrations using the run_migrations script
-        logger.info("Setting up and running migrations...")
-        
         # First check if migrations directory exists, if not, set it up
         migrations_dir = project_root / "migrations"
         if not migrations_dir.exists():
@@ -45,8 +33,9 @@ def test_connection():
             from scripts.setup_alembic import setup_alembic
             setup_alembic()
             
+            logger.info("Alembic setup complete. Creating initial migration...")
+            
             # Create initial migration
-            logger.info("Creating initial migration...")
             result = subprocess.run(
                 ["alembic", "revision", "--autogenerate", "-m", "Initial database creation"],
                 cwd=str(project_root),
@@ -57,6 +46,8 @@ def test_connection():
             if result.returncode != 0:
                 logger.error(f"Failed to create initial migration: {result.stderr}")
                 raise RuntimeError("Failed to create initial migration")
+            
+            logger.info("Initial migration created successfully")
         
         # Run migrations
         logger.info("Running database migrations...")
@@ -70,22 +61,19 @@ def test_connection():
         if result.returncode != 0:
             logger.error(f"Migration failed: {result.stderr}")
             raise RuntimeError(f"Migration failed: {result.stderr}")
-            
-        # Check tables
-        inspector = inspect(engine)
-        table_names = inspector.get_table_names()
-        logger.info(f"Tables in database: {', '.join(table_names)}")
         
-        # Verify expected tables
-        expected_tables = {'users', 'conversations', 'messages'}
-        missing_tables = expected_tables - set(table_names)
-        if missing_tables:
-            logger.warning(f"Missing tables: {', '.join(missing_tables)}")
-            
+        logger.info("Database migrations completed successfully")
+        return True
+        
     except Exception as e:
-        logger.error(f"Error connecting to database: {e}")
-        sys.exit(1)
+        logger.error(f"Error running migrations: {str(e)}")
+        return False
 
 
 if __name__ == "__main__":
-    test_connection()
+    success = run_migrations()
+    if not success:
+        logger.error("Migration process failed. Exiting...")
+        sys.exit(1)
+    
+    logger.info("Migration process completed successfully")
